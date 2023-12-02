@@ -1,0 +1,214 @@
+<!DOCTYPE HTML>
+<!--
+	Hyperspace by HTML5 UP
+	html5up.net | @ajlkn
+	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
+-->
+<html>
+	<head>
+		<title>Elements - Hyperspace by HTML5 UP</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="assets/css/main.css" />
+		<noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
+	</head>
+	<body class="is-preload">
+
+		<!-- Header -->
+			<header id="header">
+				<a href="index.html" class="title">Portfolio</a>
+				<nav>
+					<ul>
+						<li><a href="index.html">Home</a></li>
+						<li><a href="map03.html">Project</a></li>
+						<li><a href="elements03.html"  class="active">Link to Code</a></li>
+					</ul>
+				</nav>
+			</header>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Main -->
+					<section id="main" class="wrapper">
+						<div class="inner">
+							<h1 class="major">K-Means Unsupervised Classification</h1>
+
+							<!-- Text -->
+								<section>
+									<h2>Description</h2>
+									<p>This was a 2 category unsupervised K-means classification done on a section of the Bom Fortuna Parque Nacional in Brazil using Google Earth Engine. <a href="https://code.earthengine.google.com/?scriptPath=users%2Flinemilo22%2Fdefault%3ARondoniaCLassModel">Here is a link to the project</a>.</p>
+									<hr />
+									<h3>Code:</h3>
+									<pre><code>
+	// Define the study area
+	var geometry = ee.Geometry.Polygon(
+		[[-64.14770906434637, -9.502199089171773],
+		[-63.99575764789588, -9.502199089171773],
+		[-63.99575764789588, -9.64190920171737],
+		[-64.14770906434637, -9.64190920171737]]);
+	
+	// Define the date range you are interested in
+	var startDate = ee.Date('2019-11-02');
+	var endDate = ee.Date('2020-11-03');
+	
+	// Filter Landsat 8 image collection by date and region
+	var landsatCollection = ee.ImageCollection('LANDSAT/LC08/C01/T1_SR')
+		.filterBounds(geometry)
+		.filterDate(startDate, endDate)
+		.sort('CLOUD_COVER', true);
+	
+	// Select the first (least cloudy) image from the collection
+	var landsatImage = ee.Image(landsatCollection.first());
+	
+	// Print the image to the console
+	print('Landsat 8 Image:', landsatImage);
+	
+	// Add the image to the map
+	Map.centerObject(geometry, 12.8);
+	Map.addLayer(landsatImage, {
+		bands: ['B4', 'B3', 'B2'], // True Color (Red, Green, Blue)
+		min: 0,
+		max: 3000
+	}, 'Landsat 8 Image');
+	
+	// Get Landsat 8 SR Image
+	var l8SR = landsatImage.clip(geometry);
+	print(l8SR);
+	
+	// Use these Landsat 8 bands and rescale spectral reflectance values
+	var bands = ['B2', 'B3', 'B4', 'B5', 'B6', 'B7'];
+	l8SR = l8SR.select(bands).divide(10000);
+	
+	// Define the visualization parameters
+	var vizParams = {
+		bands: ['B4', 'B3', 'B2'],
+		min: 0,
+		max: 0.4,
+	};
+	
+	// Map the Landsat 8 image
+	Map.addLayer(l8SR, vizParams, 'RGB composite');
+	print(l8SR);
+	
+	// Unsupervised classification
+	
+	// Make the training dataset
+	var trainingKMeans = l8SR.sample({
+		region: geometry,
+		scale: 30,
+		numPixels: 100,
+		seed: 123
+	});
+	
+	// Instantiate the clusterer and train it
+	var clusterer = ee.Clusterer.wekaKMeans(2).train(trainingKMeans);
+	
+	// Cluster the input using the trained clusterer
+	var clusteredL8SR = l8SR.cluster(clusterer);
+	
+	// Reorder the clusters to match the legend
+	clusteredL8SR = clusteredL8SR.remap([1, 0], [0, 1]);
+	
+	// Define specific colors for each cluster
+	var clusterPalette = ['FFFF00', 'FF00FF']; // Red, Green, Blue, Yellow, Light Blue FFFF00
+	
+	// Define cluster names
+	var clusterNames = ['Forest Cover', 'Cleared Land'];
+	
+	// Create a custom legend
+	var legend = ui.Panel({
+		style: {
+		position: 'top-left',
+		padding: '8px 15px',
+		}
+	});
+	
+	// Create and add legend entries
+	var legendTitle = ui.Label({
+		value: 'Legend',
+		style: {
+		fontWeight: 'bold', // Make the title bold
+		},
+	});
+	legend.add(legendTitle);
+	
+	for (var i = 0; i < 2; i++) {
+		var clusterLabel = ui.Label({
+		value: clusterNames[i],
+		style: {
+			margin: '0 0 4px 0',
+		},
+		});
+	
+		var colorBox = ui.Label({
+		style: {
+			backgroundColor: '#' + clusterPalette[i], // Use specific cluster colors
+			padding: '8px',
+			margin: '0 0 4px 0',
+		},
+		});
+	
+		legend.add(clusterLabel);
+		legend.add(colorBox);
+	}
+	
+	// Add legend to the map
+	Map.add(legend);
+	
+	// Display the clusters with specific colors and labels
+	Map.addLayer(clusteredL8SR, { palette: clusterPalette, min: 0, max: 2 }, 'clusters');
+	
+	
+	
+	// DOwnload 
+	
+	// Define the export parameters
+	var exportParams = {
+		image: clusteredL8SR,
+		description: 'Cat_export', // Set a description for the exported file
+		folder: 'Downloads', // Set the folder name where the file will be saved
+		scale: 30, // Set the scale (e.g., 30 meters per pixel)
+		region: geometry, // Set the region of interest
+		//maxPixels: 1e13 // Set the maximum number of pixels to allow in the export
+	};
+	
+	// Export the LST image to Google Drive
+	Export.image.toDrive(exportParams);
+	
+	// Print a message to confirm the export task
+	print('Exporting LST data. Please check the Tasks tab for the export status.');
+										
+</code></pre>
+</section>
+
+							<!-- Lists -->
+											<h3>Profiles</h3>
+											<ul class="icons">
+												<li><a href="https://www.linkedin.com/in/miloline/" class="icon brands fa-instagram"><span class="label">Instagram</span></a></li>
+												<li><a href="#" class="icon brands fa-github"><span class="label">Github</span></a></li>
+											</ul>
+										</div>
+									</div>
+				
+
+		<!-- Footer -->
+			<footer id="footer" class="wrapper alt">
+				<div class="inner">
+					<ul class="menu">
+						<li>&copy; Untitled. All rights reserved.</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+					</ul>
+				</div>
+			</footer>
+
+		<!-- Scripts -->
+			<script src="assets/js/jquery.min.js"></script>
+			<script src="assets/js/jquery.scrollex.min.js"></script>
+			<script src="assets/js/jquery.scrolly.min.js"></script>
+			<script src="assets/js/browser.min.js"></script>
+			<script src="assets/js/breakpoints.min.js"></script>
+			<script src="assets/js/util.js"></script>
+			<script src="assets/js/main.js"></script>
+
+	</body>
+</html>
